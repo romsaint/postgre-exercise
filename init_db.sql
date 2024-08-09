@@ -38,6 +38,22 @@
 -- заказов (группировка по product_id). Результирующая 
 -- таблица должна иметь колонки product_name и units_in_stock.
 
+-- 10. Вывести все товары (уникальные названия продуктов), которых
+-- заказано ровно 10 единиц.
+
+-- 11. Определить общий объем продаж для каждого продукта, учитывая количество единиц продукта, заказанных клиентами, и 
+-- количество единиц продукта, которые уже находятся в заказе (units_on_order). Используй CASE WHEN THEN ELSE END
+
+-- 12. Выведи все повторяющиеся номера заказов.
+
+-- 13. Вывести уникальные order_id, сумму unit_price для каждого order_id
+-- и список product_id, разделенных запятыми, для каждого order_id
+
+-- 14. Вывести список категорий(category_id, category_name) и соответствующие им списки продуктов, разделенные запятыми
+
+-- 15. Вывести для каждого заказа контактное имя клиента, идентификатор заказа, общую сумму заказа(quantity * unit_price), 
+-- округленную до одного знака после запятой и список продуктов(STRING_AGG), разделенных запятыми, 
+-- отсортированных по убыванию общей суммы заказа
 --     --     --     --     --     --     --     --     --     --     --     --
 
 select * from categories
@@ -129,3 +145,75 @@ HAVING p.units_in_stock < ALL(
 )
 
 -- 10.
+SELECT DISTINCT p.product_name FROM products p
+JOIN order_details od USING(product_id)
+WHERE od.quantity = 10
+ORDER BY p.product_name
+
+-- 11.
+SELECT p.product_id, 
+       SUM(CASE WHEN p.units_on_order != 0 THEN od.quantity * p.units_on_order ELSE od.quantity END) AS total_quantity
+FROM order_details od
+JOIN products p USING(product_id)
+GROUP BY p.product_id
+ORDER BY total_quantity
+
+-- 12.
+SELECT order_id FROM order_details
+GROUP BY order_id
+HAVING COUNT(order_id) > 1
+
+-- 13.
+WITH od AS (
+    SELECT * FROM order_details
+)
+
+SELECT 
+    order_id, 
+    sum_unit_price, 
+    STRING_AGG(product_id::TEXT, ', ') AS product_ids
+FROM (
+    SELECT order_id, SUM(unit_price) AS sum_unit_price FROM od
+    GROUP BY order_id
+) AS summary
+JOIN od USING(order_id)
+GROUP BY order_id, sum_unit_price
+ORDER BY order_id;
+
+-- 14.
+WITH product_list AS (
+	SELECT category_id, STRING_AGG(product_name, ', ') AS product_list FROM products
+	GROUP BY category_id
+	ORDER BY category_id
+)
+
+SELECT category_id, category_name, product_list FROM categories
+JOIN product_list USING(category_id)
+
+-- 15.
+WITH sums AS (
+    SELECT order_id, SUM(unit_price * quantity) AS total_amount
+    FROM order_details
+    GROUP BY order_id
+),
+list AS (
+    SELECT order_id, STRING_AGG(product_name, ', ') AS product_list
+    FROM order_details
+    JOIN products USING(product_id)
+    GROUP BY order_id
+)
+SELECT c.contact_name, order_id, ROUND(total_amount::NUMERIC, 1) AS total_sum, product_list FROM orders
+JOIN sums s USING(order_id)
+JOIN customers c USING(customer_id)
+JOIN list l USING(order_id)
+ORDER BY total_sum DESC
+
+-- 16.
+
+-- USEFUL CODE  -- USEFUL CODE  -- USEFUL CODE  -- USEFUL CODE  -- USEFUL CODE  -- USEFUL CODE  -- USEFUL CODE  -- USEFUL CODE
+SELECT order_id, product_name, p.unit_price, ROW_NUMBER()OVER(PARTITION BY order_id ORDER BY p.unit_price DESC) || '_' || order_id::TEXT AS row_number_id FROM order_details
+JOIN products p USING(product_id);
+
+SELECT o.order_id, p.product_name, p.unit_price,  o.ship_region, ROW_NUMBER()OVER(PARTITION BY o.ship_region ORDER BY p.unit_price DESC) AS num FROM orders o
+JOIN order_details od USING(order_id)
+JOIN products p USING(product_id);
